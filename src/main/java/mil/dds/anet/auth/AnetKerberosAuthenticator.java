@@ -53,8 +53,8 @@ public class AnetKerberosAuthenticator implements Authenticator<BasicCredentials
       // Special development mechanism to perform a 'first login'.
       Person newUser = new Person();
       newUser.setName(credentials.getUsername());
-      newUser.setRole(Role.ADVISOR); // TODO
-      newUser.setDomainUsername(credentials.getUsername()); // TODO
+      newUser.setRole(Role.ADVISOR); // TODO: This should come from LDAP (?)
+      newUser.setDomainUsername(credentials.getUsername()); // TODO: This should come from LDAP (?)
       newUser.setStatus(PersonStatus.NEW_USER);
       newUser = dao.insert(newUser);
 
@@ -87,7 +87,6 @@ public class AnetKerberosAuthenticator implements Authenticator<BasicCredentials
           spnegoClient = SpnegoClient.loginWithTicketCache(credentials.getUsername());
           break;
         default:
-          // TODO: Log incorrect configuration (?)
           return false;
       }
 
