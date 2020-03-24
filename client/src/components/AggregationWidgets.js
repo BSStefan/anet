@@ -24,7 +24,7 @@ const NumberAggWidget = ({ values, aggregationType, ...otherWidgetProps }) =>
 NumberAggWidget.propTypes = aggregationPropTypes
 
 const DefaultAggWidget = ({ values, ...otherWidgetProps }) => (
-  <div>values.length + " values: [" + values + "]"</div>
+  <div>{values.length + " values: [" + values + "]"}</div>
 )
 DefaultAggWidget.propTypes = aggregationPropTypes
 
@@ -42,7 +42,7 @@ const AggregationWidget = ({
   vertical,
   ...otherWidgetProps
 }) => {
-  const Widget = widget ? WIDGETS[widget] : WIDGETS.default
+  const Widget = WIDGETS[widget || {}] || DefaultAggWidget
   const widgetElem = (
     <Widget
       values={values}
