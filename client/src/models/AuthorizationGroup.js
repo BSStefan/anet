@@ -7,6 +7,7 @@ export default class AuthorizationGroup extends Model {
   static resourceName = "AuthorizationGroup"
   static listName = "authorizationGroupList"
   static getInstanceName = "authorizationGroup"
+  static relatedObjectType = "authorizationGroups"
 
   static displayName() {
     // TODO: Get the display name from the dictionary
@@ -21,22 +22,13 @@ export default class AuthorizationGroup extends Model {
   static yupSchema = yup
     .object()
     .shape({
-      name: yup
-        .string()
-        .required()
-        .default(""),
-      description: yup
-        .string()
-        .required()
-        .default(""),
+      name: yup.string().required().default(""),
+      description: yup.string().required().default(""),
       status: yup
         .string()
         .required()
         .default(() => AuthorizationGroup.STATUS.ACTIVE),
-      positions: yup
-        .array()
-        .nullable()
-        .default([])
+      positions: yup.array().nullable().default([])
     })
     .concat(Model.yupSchema)
 

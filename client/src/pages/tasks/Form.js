@@ -23,7 +23,7 @@ import { jumpToTop } from "components/Page"
 import PositionTable from "components/PositionTable"
 import OrganizationTable from "components/OrganizationTable"
 import RichTextEditor from "components/RichTextEditor"
-import { FastField, Form, Formik } from "formik"
+import { FastField, Field, Form, Formik } from "formik"
 import { Organization, Person, Position, Task } from "models"
 import PropTypes from "prop-types"
 import React, { useState } from "react"
@@ -67,8 +67,8 @@ const BaseTaskForm = ({ currentUser, edit, title, initialValues }) => {
     }
   ]
 
-  const ShortNameField = DictionaryField(FastField)
-  const LongNameField = DictionaryField(FastField)
+  const ShortNameField = DictionaryField(Field)
+  const LongNameField = DictionaryField(Field)
   const TaskCustomFieldRef1 = DictionaryField(FastField)
   const TaskCustomField = DictionaryField(FastField)
   const PlannedCompletionField = DictionaryField(FastField)
@@ -92,7 +92,7 @@ const BaseTaskForm = ({ currentUser, edit, title, initialValues }) => {
 
   const tasksFilters = {
     allObjectives: {
-      label: "All objectives", // TODO: Implement conditional labels, until then, we need to be explicit here
+      label: `All ${Settings.fields.task.topLevel.longLabel}`,
       queryVars: { hasCustomFieldRef1: false }
     }
   }
@@ -154,6 +154,7 @@ const BaseTaskForm = ({ currentUser, edit, title, initialValues }) => {
       }) => {
         const isAdmin = currentUser && currentUser.isAdmin()
         const disabled = !isAdmin
+        const fieldSettings = values.fieldSettings()
         const action = (
           <div>
             <Button
@@ -163,7 +164,7 @@ const BaseTaskForm = ({ currentUser, edit, title, initialValues }) => {
               onClick={submitForm}
               disabled={isSubmitting}
             >
-              Save {Settings.fields.task.shortLabel}
+              Save {fieldSettings.shortLabel}
             </Button>
           </div>
         )
@@ -175,14 +176,14 @@ const BaseTaskForm = ({ currentUser, edit, title, initialValues }) => {
               <Fieldset title={title} action={action} />
               <Fieldset>
                 <ShortNameField
-                  dictProps={Settings.fields.task.shortName}
+                  dictProps={fieldSettings.shortName}
                   name="shortName"
                   component={FieldHelper.InputField}
                   disabled={disabled}
                 />
 
                 <LongNameField
-                  dictProps={Settings.fields.task.longName}
+                  dictProps={fieldSettings.longName}
                   name="longName"
                   component={FieldHelper.InputField}
                 />
@@ -395,7 +396,7 @@ const BaseTaskForm = ({ currentUser, edit, title, initialValues }) => {
 
               {Settings.fields.task.customFields && !disabled && (
                 <Fieldset
-                  title={`${Settings.fields.task.shortLabel} information`}
+                  title={`${fieldSettings.shortLabel} information`}
                   id="custom-fields"
                 >
                   <CustomFieldsContainer
@@ -442,7 +443,7 @@ const BaseTaskForm = ({ currentUser, edit, title, initialValues }) => {
                     onClick={submitForm}
                     disabled={isSubmitting}
                   >
-                    Save {Settings.fields.task.shortLabel}
+                    Save {fieldSettings.shortLabel}
                   </Button>
                 </div>
               </div>
@@ -512,7 +513,7 @@ const BaseTaskForm = ({ currentUser, edit, title, initialValues }) => {
         type: NOTE_TYPE.CHANGE_RECORD,
         noteRelatedObjects: [
           {
-            relatedObjectType: "tasks",
+            relatedObjectType: Task.relatedObjectType,
             relatedObjectUuid: initialValues.uuid
           }
         ],

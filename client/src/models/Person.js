@@ -15,6 +15,7 @@ export default class Person extends Model {
   static resourceName = "Person"
   static listName = "personList"
   static getInstanceName = "person"
+  static relatedObjectType = "people"
 
   static STATUS = {
     NEW_USER: "NEW_USER",
@@ -37,14 +38,8 @@ export default class Person extends Model {
   static yupSchema = yup
     .object()
     .shape({
-      uuid: yup
-        .string()
-        .nullable()
-        .default(null),
-      name: yup
-        .string()
-        .nullable()
-        .default(""),
+      uuid: yup.string().nullable().default(null),
+      name: yup.string().nullable().default(""),
       // not actually in the database, but used for validation
       firstName: yup
         .string()
@@ -116,10 +111,7 @@ export default class Person extends Model {
         .nullable()
         .default("")
         .label(Settings.fields.person.phoneNumber),
-      code: yup
-        .string()
-        .nullable()
-        .default(""),
+      code: yup.string().nullable().default(""),
       endOfTourDate: yupDate
         .nullable()
         .when(["role", "status"], (role, status, schema) => {
@@ -141,14 +133,8 @@ export default class Person extends Model {
         })
         .default(null)
         .label(Settings.fields.person.endOfTourDate),
-      biography: yup
-        .string()
-        .nullable()
-        .default(""),
-      position: yup
-        .object()
-        .nullable()
-        .default({}),
+      biography: yup.string().nullable().default(""),
+      position: yup.object().nullable().default({}),
       role: yup
         .string()
         .nullable()
