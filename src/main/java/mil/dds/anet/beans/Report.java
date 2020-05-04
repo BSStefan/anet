@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -505,13 +504,12 @@ public class Report extends AbstractCustomizableAnetBean {
           return CompletableFuture.completedFuture(steps);
         } else {
           return loadAdvisorOrg(context).thenCompose(ao -> {
-            return loadAscendantOrgs(context, ao).thenCompose(orgsToMatch -> {
-              return getTaskWorkflow(context, engine, orgsToMatch, tasks.iterator())
-                  .thenCompose(taskApprovalSteps -> {
-                    steps.addAll(taskApprovalSteps);
-                    return CompletableFuture.completedFuture(steps);
-                  });
-            });
+            return loadAscendantOrgs(context, ao).thenCompose(
+                orgsToMatch -> getTaskWorkflow(context, engine, orgsToMatch, tasks.iterator())
+                    .thenCompose(taskApprovalSteps -> {
+                      steps.addAll(taskApprovalSteps);
+                      return CompletableFuture.completedFuture(steps);
+                    }));
           });
         }
       });
@@ -527,6 +525,22 @@ public class Report extends AbstractCustomizableAnetBean {
               return CompletableFuture.completedFuture(steps);
             });
       }
+    }).thenCompose(steps -> {
+      @SuppressWarnings("unchecked")
+      final CompletableFuture<ApprovalStep>[] allSteps =
+          (CompletableFuture<ApprovalStep>[]) steps.stream()
+              .map(step -> getFilteredStep(context, step)).toArray(CompletableFuture<?>[]::new);
+      return CompletableFuture.allOf(allSteps).thenCompose(v -> {
+        final List<ApprovalStep> filteredSteps = new ArrayList<>();
+        for (final CompletableFuture<ApprovalStep> cas : allSteps) {
+          final ApprovalStep as = cas.join();
+          if (as != null) {
+            filteredSteps.add(as);
+          }
+        }
+        return CompletableFuture.completedFuture(filteredSteps);
+      });
+
     });
   }
 
@@ -562,11 +576,9 @@ public class Report extends AbstractCustomizableAnetBean {
       } else {
         return computeApprovalSteps(context, engine).thenCompose(steps -> {
           final List<ReportAction> actionTail = getActionTail(actions);
-          return createApprovalStepsActions(context, actionTail, steps).thenCompose(asa -> {
-            actionTail.addAll(asa);
-            workflow = actionTail;
-            return CompletableFuture.completedFuture(workflow);
-          });
+          actionTail.addAll(createApprovalStepsActions(context, actionTail, steps));
+          workflow = actionTail;
+          return CompletableFuture.completedFuture(workflow);
         });
       }
     });
@@ -593,29 +605,19 @@ public class Report extends AbstractCustomizableAnetBean {
     this.workflow = workflow;
   }
 
-  private CompletableFuture<List<ReportAction>> createApprovalStepsActions(
-      Map<String, Object> context, List<ReportAction> actions, List<ApprovalStep> steps) {
-    final List<ReportAction> newActions = new LinkedList<ReportAction>();
-    @SuppressWarnings("unchecked")
-    final CompletableFuture<ApprovalStep>[] allSteps = (CompletableFuture<ApprovalStep>[]) steps
-        .stream().map(step -> createApprovalStep(context, actions, step))
-        .toArray(CompletableFuture<?>[]::new);
-    return CompletableFuture.allOf(allSteps).thenCompose(v -> {
-      for (final CompletableFuture<ApprovalStep> cas : allSteps) {
-        final ApprovalStep as = cas.join();
-        if (as != null) {
-          // If there is no action for this step, create a new one and attach this step
+  private List<ReportAction> createApprovalStepsActions(Map<String, Object> context,
+      List<ReportAction> actions, List<ApprovalStep> steps) {
+    return steps.stream().map(step -> createApprovalStep(context, actions, step))
+        .filter(as -> as != null).map(as -> {
+          // There is no action for this step, create a new one and attach this step
           final ReportAction action = new ReportAction();
           action.setStep(as);
-          newActions.add(action);
-        }
-      }
-      return CompletableFuture.completedFuture(newActions);
-    });
+          return action;
+        }).collect(Collectors.toList());
   }
 
-  private CompletableFuture<ApprovalStep> createApprovalStep(Map<String, Object> context,
-      List<ReportAction> actions, ApprovalStep step) {
+  private ApprovalStep createApprovalStep(Map<String, Object> context, List<ReportAction> actions,
+      ApprovalStep step) {
     // Check if there are report actions for this step
     final Optional<ReportAction> existing =
         actions.stream().filter(a -> Objects.equals(DaoUtils.getUuid(step), a.getStepUuid()))
@@ -625,10 +627,7 @@ public class Report extends AbstractCustomizableAnetBean {
                 return a.getCreatedAt().compareTo(b.getCreatedAt());
               }
             });
-    if (existing.isPresent()) {
-      return CompletableFuture.completedFuture(null);
-    }
-    return getFilteredStep(context, step);
+    return existing.isPresent() ? null : step;
   }
 
   private CompletableFuture<ApprovalStep> getFilteredStep(Map<String, Object> context,
@@ -636,10 +635,6 @@ public class Report extends AbstractCustomizableAnetBean {
     if (!step.isRestrictedApproval()) {
       return CompletableFuture.completedFuture(step);
     }
-    // Return a copy of the step, with the approvers filtered to those who can actually approve
-    final ApprovalStep filteredStep = new ApprovalStep();
-    filteredStep.setUuid(step.getUuid());
-    filteredStep.setName(step.getName());
     return step.loadApprovers(context).thenCompose(approvers -> {
       final AnetObjectEngine engine = AnetObjectEngine.getInstance();
       @SuppressWarnings("unchecked")
@@ -655,8 +650,17 @@ public class Report extends AbstractCustomizableAnetBean {
             filteredApprovers.add(approvers.get(i));
           }
         }
-        filteredStep.setApprovers(filteredApprovers);
-        return CompletableFuture.completedFuture(filteredStep);
+        if (filteredApprovers.isEmpty()
+            && !Objects.equals(getApprovalStepUuid(), DaoUtils.getUuid(step))) {
+          // No actual approvers, and step is not the current approval step: step does not apply
+          return CompletableFuture.completedFuture(null);
+        } else {
+          // Copy the step, but with the approvers filtered to those who can actually approve (might
+          // be empty)
+          final ApprovalStep filteredStep = step.clone();
+          filteredStep.setApprovers(filteredApprovers);
+          return CompletableFuture.completedFuture(filteredStep);
+        }
       });
     });
   }
@@ -715,33 +719,25 @@ public class Report extends AbstractCustomizableAnetBean {
     } else {
       final Task task = taskIterator.next();
       return matchTaskedOrgs(context, orgsToMatch, task)
-          .thenCompose(taskedOrgsMatch -> (isFutureEngagement()
+          .thenCompose(matchingTaskedOrgs -> (isFutureEngagement()
               ? getPlanningWorkflowForRelatedObject(context, engine, DaoUtils.getUuid(task))
               : getWorkflowForRelatedObject(context, engine, DaoUtils.getUuid(task))).thenCompose(
                   taskSteps -> getTaskWorkflow(context, engine, orgsToMatch, taskIterator)
                       .thenCompose(nextTaskSteps -> {
-                        final List<ApprovalStep> ts = filterTaskSteps(taskSteps, taskedOrgsMatch);
-                        ts.addAll(filterTaskSteps(nextTaskSteps, taskedOrgsMatch));
-                        return CompletableFuture.completedFuture(ts);
+                        taskSteps.addAll(nextTaskSteps);
+                        return CompletableFuture.completedFuture(taskSteps);
                       })));
     }
   }
 
-  private CompletableFuture<Boolean> matchTaskedOrgs(Map<String, Object> context,
+  private CompletableFuture<Set<String>> matchTaskedOrgs(Map<String, Object> context,
       Set<String> orgsToMatch, Task task) {
     return task.loadTaskedOrganizations(context).thenCompose(taskedOrganizations -> {
       final Set<String> matchingOrgs =
           taskedOrganizations.stream().map(o -> DaoUtils.getUuid(o)).collect(Collectors.toSet());
       matchingOrgs.retainAll(orgsToMatch);
-      return CompletableFuture.completedFuture(!matchingOrgs.isEmpty());
+      return CompletableFuture.completedFuture(matchingOrgs);
     });
-  }
-
-  private List<ApprovalStep> filterTaskSteps(List<ApprovalStep> taskSteps,
-      Boolean taskedOrgsMatch) {
-    return taskSteps.stream()
-        .filter(taskStep -> !taskStep.isRestrictedApproval() || taskedOrgsMatch)
-        .collect(Collectors.toList());
   }
 
   private CompletableFuture<List<ApprovalStep>> getLocationWorkflow(Map<String, Object> context,
