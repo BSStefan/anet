@@ -111,6 +111,7 @@ export default class Task extends Model {
               .string()
               .required()
               .default(() => Task.APPROVAL_STEP_TYPE.PLANNING_APPROVAL),
+            restrictedApproval: yup.boolean().default(false),
             approvers: yup
               .array()
               .required("You must select at least one approver")
@@ -131,6 +132,7 @@ export default class Task extends Model {
               .string()
               .required()
               .default(() => Task.APPROVAL_STEP_TYPE.REPORT_APPROVAL),
+            restrictedApproval: yup.boolean().default(false),
             approvers: yup
               .array()
               .required("You must select at least one approver")
