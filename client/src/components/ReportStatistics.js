@@ -1,6 +1,6 @@
 import API, { Settings } from "api"
 import { gql } from "apollo-boost"
-import { WIDGET_AGGREGATIONS } from "components/aggregations/utils"
+import { getAggregationComponentForFieldConfig } from "components/aggregations/utils"
 import { PageDispatchersPropType, useBoilerplate } from "components/Page"
 import _get from "lodash/get"
 import { Report } from "models"
@@ -16,7 +16,7 @@ import { Table } from "react-bootstrap"
 
 const REPORT_FIELDS_FOR_STATISTICS = {
   state: {
-    aggregation: { widget: "countPerValue" },
+    aggregation: { aggregationType: "countPerValue", widget: "pie" },
     label: "State",
     choices: {
       [Report.STATE.DRAFT]: {
@@ -46,12 +46,14 @@ const REPORT_FIELDS_FOR_STATISTICS = {
     }
   },
   atmosphere: {
-    aggregation: { widget: "countPerValue" },
+    aggregation: { aggregationType: "countPerValue", widget: "pie" },
     label: Settings.fields.report.atmosphere
   },
-  // FIXME: right not the bar chart ends in an endless loop
   tasks: {
-    aggregation: { widget: "reportsByTask" },
+    aggregation: {
+      aggregationType: "countReportsByTask",
+      widget: "reportsByTask"
+    },
     label: pluralize(Settings.fields.task.subLevel.shortLabel)
   }
 }
@@ -84,11 +86,12 @@ const FieldStatisticsRow = ({
   periods,
   periodsData
 }) => {
-  if (!fieldConfig.aggregation) {
+  const AggregationComponent = getAggregationComponentForFieldConfig(
+    fieldConfig
+  )
+  if (!AggregationComponent) {
     return null
   }
-  const AggregationComponent =
-    WIDGET_AGGREGATIONS[fieldConfig.aggregation.widget || fieldConfig.widget]
   return (
     <tr>
       {periods.map((period, index) => (

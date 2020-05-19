@@ -2,20 +2,24 @@ import AggregationWidgetContainer from "components/aggregations/AggregationWidge
 import PropTypes from "prop-types"
 import React from "react"
 
-const ValuesListAggregation = ({ fieldName, fieldConfig, data }) => {
+const arrayOfNumbers = arr =>
+  arr.filter(n => !isNaN(parseFloat(n)) && isFinite(n)).map(n => Number(n))
+
+const NumbersListAggregation = ({ fieldName, fieldConfig, data }) => {
   const values = data.map(item => Object.get(item, fieldName))
+  const numberValues = arrayOfNumbers(values)
   return (
     <AggregationWidgetContainer
       key={`assessment-${fieldName}`}
       fieldConfig={fieldConfig}
-      values={values}
+      values={numberValues}
     />
   )
 }
-ValuesListAggregation.propTypes = {
+NumbersListAggregation.propTypes = {
   data: PropTypes.array,
   fieldName: PropTypes.string,
   fieldConfig: PropTypes.object
 }
 
-export default ValuesListAggregation
+export default NumbersListAggregation
