@@ -2,18 +2,16 @@ import { Icon } from "@blueprintjs/core"
 import { IconNames } from "@blueprintjs/icons"
 import AppContext from "components/AppContext"
 import AssessmentModal from "components/assessments/AssessmentModal"
-import { PeriodPropType, periodToString } from "components/assessments/utils"
-import ConfirmDelete from "components/ConfirmDelete"
 import { ReadonlyCustomFields } from "components/CustomFields"
 import { Formik } from "formik"
 import LinkTo from "components/LinkTo"
 import Model from "components/Model"
 import { Person } from "models"
 import moment from "moment"
+import { AssessmentPeriodPropType, periodToString } from "periodUtils"
 import PropTypes from "prop-types"
 import React, { useState } from "react"
 import { Button, Panel } from "react-bootstrap"
-import REMOVE_ICON from "resources/delete.png"
 import "components/assessments/AssessmentResultsTable.css"
 
 const BasePeriodicAssessment = ({
@@ -80,17 +78,6 @@ const BasePeriodicAssessment = ({
                 }}
                 onCancel={() => setShowAssessmentModalKey(null)}
               />
-              <ConfirmDelete
-                // FIXME: implement delete assessment
-                onConfirmDelete={() => console.log("to be implemented")}
-                objectType="note"
-                objectDisplay={"#" + note.uuid}
-                title="Delete note"
-                bsSize="xsmall"
-                bsStyle="primary"
-              >
-                <img src={REMOVE_ICON} height={14} alt="Delete assessment" />
-              </ConfirmDelete>
             </>
           )}
         </>
@@ -130,7 +117,7 @@ BasePeriodicAssessment.propTypes = {
   assessmentYupSchema: PropTypes.object.isRequired,
   note: Model.notePropTypes.isRequired,
   entity: PropTypes.object.isRequired,
-  period: PeriodPropType.isRequired,
+  period: AssessmentPeriodPropType.isRequired,
   recurrence: PropTypes.string.isRequired,
   onUpdateAssessment: PropTypes.func,
   currentUser: PropTypes.instanceOf(Person)
