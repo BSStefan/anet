@@ -1,6 +1,8 @@
 import API, { Settings } from "api"
 import { gql } from "apollo-boost"
-import { getAggregationComponentForFieldConfig } from "components/aggregations/utils"
+import AggregationWidgetContainer, {
+  getAggregationWidget
+} from "components/aggregations/AggregationWidgetContainer"
 import { PageDispatchersPropType, useBoilerplate } from "components/Page"
 import _get from "lodash/get"
 import { Report } from "models"
@@ -13,6 +15,7 @@ import pluralize from "pluralize"
 import PropTypes from "prop-types"
 import React, { useEffect } from "react"
 import { Table } from "react-bootstrap"
+import utils from "utils"
 
 const REPORT_FIELDS_FOR_STATISTICS = {
   state: {
@@ -86,17 +89,15 @@ const FieldStatisticsRow = ({
   periods,
   periodsData
 }) => {
-  const AggregationComponent = getAggregationComponentForFieldConfig(
-    fieldConfig
-  )
-  if (!AggregationComponent) {
+  const aggregationWidget = getAggregationWidget(fieldConfig)
+  if (!aggregationWidget) {
     return null
   }
   return (
     <tr>
       {periods.map((period, index) => (
         <td key={index}>
-          <AggregationComponent
+          <AggregationWidgetContainer
             key={`statistics-${fieldName}`}
             fieldConfig={fieldConfig}
             fieldName={fieldName}
@@ -151,7 +152,8 @@ const ReportStatistics = ({
         elem.engagementDate >= dateRange.start
     )
     reportsForDateRange.map(
-      report => (report[CUSTOM_FIELDS_KEY] = JSON.parse(report.customFields))
+      report =>
+        (report[CUSTOM_FIELDS_KEY] = utils.parseJsonSafe(report.customFields))
     )
     return reportsForDateRange
   }
