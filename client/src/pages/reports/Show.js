@@ -34,12 +34,13 @@ import { Comment, Person, Position, Report } from "models"
 import moment from "moment"
 import pluralize from "pluralize"
 import PropTypes from "prop-types"
-import React, { useState } from "react"
+import React, { useState, useRef } from "react"
 import { Alert, Button, Col, HelpBlock, Modal } from "react-bootstrap"
 import Confirm from "react-confirm-bootstrap"
 import { connect } from "react-redux"
 import { useHistory, useParams } from "react-router-dom"
 import { toast } from "react-toastify"
+import ReactToPrint from "react-to-print"
 import { deserializeQueryParams } from "searchUtils"
 import utils from "utils"
 import { parseHtmlWithLinkTo } from "utils_links"
@@ -268,6 +269,7 @@ const GQL_APPROVE_REPORT = gql`
 `
 
 const BaseReportShow = ({ currentUser, setSearchQuery, pageDispatchers }) => {
+  const componentRef = useRef()
   const history = useHistory()
   const [saveSuccess, setSaveSuccess] = useState(null)
   const [saveError, setSaveError] = useState(null)
@@ -363,6 +365,10 @@ const BaseReportShow = ({ currentUser, setSearchQuery, pageDispatchers }) => {
       {({ isSubmitting, setSubmitting, isValid, setFieldValue, values }) => {
         const action = (
           <div>
+            <ReactToPrint
+              trigger={() => <Button>Print report</Button>}
+              content={() => componentRef.current}
+            />
             {canEmail && (
               <Button onClick={toggleEmailModal}>Email report</Button>
             )}
@@ -379,7 +385,7 @@ const BaseReportShow = ({ currentUser, setSearchQuery, pageDispatchers }) => {
         )
 
         return (
-          <div className="report-show">
+          <div className="report-show" ref={componentRef}>
             {renderEmailModal(values, setFieldValue)}
 
             <RelatedObjectNotes
