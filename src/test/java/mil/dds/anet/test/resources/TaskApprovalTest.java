@@ -7,14 +7,20 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.collect.Lists;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import javax.ws.rs.BadRequestException;
 import javax.ws.rs.ForbiddenException;
+import mil.dds.anet.AnetObjectEngine;
 import mil.dds.anet.beans.ApprovalStep;
 import mil.dds.anet.beans.ApprovalStep.ApprovalStepType;
 import mil.dds.anet.beans.Location;
 import mil.dds.anet.beans.Person;
+import mil.dds.anet.beans.Position;
 import mil.dds.anet.beans.Report;
 import mil.dds.anet.beans.Report.Atmosphere;
 import mil.dds.anet.beans.Report.ReportState;
@@ -24,8 +30,17 @@ import mil.dds.anet.beans.Task;
 import mil.dds.anet.beans.lists.AnetBeanList;
 import mil.dds.anet.beans.search.PersonSearchQuery;
 import mil.dds.anet.beans.search.ReportSearchQuery;
+import mil.dds.anet.config.AnetConfiguration;
 import mil.dds.anet.test.beans.PersonTest;
+import mil.dds.anet.test.integration.utils.EmailResponse;
+import mil.dds.anet.test.integration.utils.FakeSmtpServer;
+import mil.dds.anet.test.integration.utils.TestApp;
 import mil.dds.anet.test.resources.utils.GraphQlResponse;
+import mil.dds.anet.threads.AnetEmailWorker;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 public class TaskApprovalTest extends AbstractResourceTest {
@@ -35,16 +50,18 @@ public class TaskApprovalTest extends AbstractResourceTest {
   private static final String POSITION_FIELDS =
       "uuid name code type status organization { " + ORGANIZATION_FIELDS + " }";
   private static final String PERSON_FIELDS =
-      "uuid name status role rank domainUsername position { " + POSITION_FIELDS + " }";
+      "uuid name status role rank domainUsername emailAddress position { " + POSITION_FIELDS + " }";
   private static final String APPROVAL_STEP_FIELDS =
       "uuid name restrictedApproval relatedObjectUuid nextStepUuid approvers"
           + " { uuid name person { uuid name rank role } }";
   private static final String REPORT_FIELDS =
       "uuid state workflow { type createdAt person { uuid } step { " + APPROVAL_STEP_FIELDS
           + " } }";
-  private static final String TASK_FIELDS = "uuid shortName longName status taskedOrganizations"
-      + " { uuid shortName longName identificationCode } planningApprovalSteps { "
-      + APPROVAL_STEP_FIELDS + " } approvalSteps { " + APPROVAL_STEP_FIELDS + " }";
+  private static final String TASK_FIELDS = "uuid shortName longName status"
+      + " customField customFieldEnum1 customFieldEnum2 plannedCompletion projectedCompletion"
+      + " taskedOrganizations { uuid shortName longName identificationCode }"
+      + " customFieldRef1 { uuid } responsiblePositions { uuid } planningApprovalSteps { "
+      + APPROVAL_STEP_FIELDS + " } approvalSteps { " + APPROVAL_STEP_FIELDS + " } customFields";
 
   // Test report approval scenarios for tasks mostly use the following data:
   // - report task 2.A (which has tasked org EF 2)
@@ -57,6 +74,57 @@ public class TaskApprovalTest extends AbstractResourceTest {
   // Location Fort Amherst
   private static final String TEST_LOCATION_UUID = "c7a9f420-457a-490c-a810-b504c022cf1e";
 
+  private static FakeSmtpServer emailServer;
+  private static AnetEmailWorker emailWorker;
+
+  private static List<ApprovalStep> savedPlanningApprovalSteps;
+  private static List<Position> savedPlanningApprovers;
+  private static List<ApprovalStep> savedApprovalSteps;
+  private static List<Position> savedApprovers;
+
+  @BeforeAll
+  public static void setUpEmailServer() throws Exception {
+    final AnetConfiguration config = TestApp.app.getConfiguration();
+    if (config.getSmtp().isDisabled()) {
+      fail("'ANET_SMTP_DISABLE' system environment variable must have value 'false' to run test.");
+    }
+    final Map<String, Object> dict = new HashMap<>(config.getDictionary());
+    @SuppressWarnings("unchecked")
+    final List<String> activeDomainNames = (List<String>) dict.get("activeDomainNames");
+    activeDomainNames.add("dds.mil");
+    config.setDictionary(dict);
+    emailWorker = new AnetEmailWorker(AnetObjectEngine.getInstance().getEmailDao(), config);
+    emailServer = new FakeSmtpServer(config.getSmtp());
+  }
+
+  @BeforeEach
+  @AfterEach
+  public void clearEmailServer() {
+    // Clear the email server before and after each test
+    clearEmailsOnServer();
+  }
+
+  @BeforeAll
+  public static void saveTaskApprovalSteps() throws Exception {
+    final Task task = getTaskFromDb(TEST_TASK_UUID);
+    savedPlanningApprovalSteps = Lists.newArrayList(task.getPlanningApprovalSteps());
+    savedPlanningApprovalSteps.stream().findFirst()
+        .ifPresent(as -> savedPlanningApprovers = as.getApprovers());
+    savedApprovalSteps = Lists.newArrayList(task.getApprovalSteps());
+    savedApprovalSteps.stream().findFirst().ifPresent(as -> savedApprovers = as.getApprovers());
+  }
+
+  @AfterAll
+  public static void restoreTaskApprovalSteps() {
+    final Task task = getTaskFromDb(TEST_TASK_UUID);
+    savedPlanningApprovalSteps.stream().findFirst()
+        .ifPresent(as -> as.setApprovers(savedPlanningApprovers));
+    task.setPlanningApprovalSteps(savedPlanningApprovalSteps);
+    savedApprovalSteps.stream().findFirst().ifPresent(as -> as.setApprovers(savedApprovers));
+    task.setApprovalSteps(savedApprovalSteps);
+    updateTask(task);
+  }
+
   // submitted report, no approval step for effort
   // => there should be no approval step for the effort on the report workflow
   @Test
@@ -66,6 +134,9 @@ public class TaskApprovalTest extends AbstractResourceTest {
     final Report report = submitReport("testNoSteps", getPersonFromDb("ERINSON, Erin"), task, false,
         ReportState.PENDING_APPROVAL);
     assertWorkflowSize(report, task.getUuid(), 0);
+    // Go through organization approval
+    organizationalApproval(report, false);
+
   }
 
   // submitted report, unrestricted approval step for effort has matching org
@@ -95,11 +166,13 @@ public class TaskApprovalTest extends AbstractResourceTest {
     // Go through organization approval first
     organizationalApproval(report, isPlanned);
 
-    // Check reports pending approval
-    checkPendingApproval(approver, report, 1);
+    // Check reports pending approval; approver should have received email
+    checkPendingApproval(approver, report, 1, true);
 
     // Approve the report
     approveReport(report, approver, false);
+    // Mail queue should be empty
+    assertEmails(0);
   }
 
   // submitted report, unrestricted approval step for effort has no matching org
@@ -130,11 +203,13 @@ public class TaskApprovalTest extends AbstractResourceTest {
     // Go through organization approval first
     organizationalApproval(report, isPlanned);
 
-    // Check reports pending approval
-    checkPendingApproval(approver, report, 1);
+    // Check reports pending approval; approver should have received email
+    checkPendingApproval(approver, report, 1, true);
 
     // Approve the report
     approveReport(report, approver, false);
+    // Mail queue should be empty
+    assertEmails(0);
   }
 
   // submitted report, restricted approval step for effort has no matching org
@@ -166,8 +241,8 @@ public class TaskApprovalTest extends AbstractResourceTest {
     // Go through organization approval first
     organizationalApproval(report, isPlanned);
 
-    // Check reports pending approval
-    checkPendingApproval(approver, report, 0);
+    // Check reports pending approval; approver should not have received email
+    checkPendingApproval(approver, report, 0, true);
 
     // Try to approve the report
     approveReport(report, approver, true);
@@ -204,10 +279,12 @@ public class TaskApprovalTest extends AbstractResourceTest {
     organizationalApproval(report, isPlanned);
 
     // Check reports pending approval
-    checkPendingApproval(approver, report, 1);
+    checkPendingApproval(approver, report, 1, true);
 
     // Approve the report
     approveReport(report, approver, false);
+    // Mail queue should be empty
+    assertEmails(0);
   }
 
   // submitted report, restricted approval step for effort has matching org,
@@ -244,7 +321,7 @@ public class TaskApprovalTest extends AbstractResourceTest {
     organizationalApproval(report, isPlanned);
 
     // Check reports pending approval
-    checkPendingApproval(approver, report, 1);
+    checkPendingApproval(approver, report, 1, true);
 
     // Replace the approver from the approval step
     final Task replacedTask = replaceApproversFromTaskApprovalSteps(updatedTask,
@@ -259,14 +336,87 @@ public class TaskApprovalTest extends AbstractResourceTest {
     assertThat(taskStep).isPresent();
     assertThat(taskStep.get().getStep().getApprovers()).isEmpty();
 
-    // Check reports pending approval
-    checkPendingApproval(approver, report2, 0);
+    // Check reports pending approval; approver should not have received email
+    checkPendingApproval(approver, report2, 0, true);
 
     // Try to approve the report
     approveReport(report2, approver, true);
 
     // Delete the report
     deleteReport(author, report2);
+  }
+
+  // submitted report, three approval steps for the effort:
+  // 1. unrestricted approval step
+  // 2. restricted approval step with no matching org
+  // 3. restricted approval step with matching org
+  //
+  // => there should be two approval steps for the effort (middle one should be filtered out)
+  // => approver 1 should see the report as pending approval
+  // => approver 1 should be able to approve the report
+  // => approver 2 should not see the report as pending approval
+  // => approver 2 should not be able to approve the report
+  // => approver 3 should see the report as pending approval
+  // => approver 3 should be able to approve the report
+  @Test
+  public void testMultipleStepsReportPublication() {
+    testMultipleSteps("testMultipleStepsReportPublication", false);
+  }
+
+  @Test
+  public void testMultipleStepsPlannedEngagement() {
+    testMultipleSteps("testMultipleStepsPlannedEngagement", false);
+  }
+
+  private void testMultipleSteps(String text, boolean isPlanned) {
+    final Task task = clearTaskApprovalSteps(TEST_TASK_UUID);
+
+    // An unrestricted step
+    final Person approverStep1 = getApprover(isPlanned);
+    final ApprovalStep as1 = getApprovalStep(approverStep1, isPlanned, false);
+
+    // A restricted step from a non-matching org
+    // Someone from EF 1.1
+    final Person approverStep2 = getPersonFromDb("ELIZAWELL, Elizabeth");
+    final ApprovalStep as2 = getApprovalStep(approverStep2, isPlanned, true);
+
+    // A restricted step from a matching org
+    final Person approverStep3 = getApprover(isPlanned);
+    final ApprovalStep as3 = getApprovalStep(approverStep3, isPlanned, true);
+
+    if (isPlanned) {
+      task.setPlanningApprovalSteps(Lists.newArrayList(as1, as2, as3));
+    } else {
+      task.setApprovalSteps(Lists.newArrayList(as1, as2, as3));
+    }
+    final Task updatedTask = updateTask(task);
+
+    final Report report = submitReport(text, getPersonFromDb("ERINSON, Erin"), updatedTask,
+        isPlanned, ReportState.PENDING_APPROVAL);
+    assertWorkflowSize(report, updatedTask.getUuid(), 2);
+
+    // Go through organization approval first
+    organizationalApproval(report, isPlanned);
+
+    // Check reports pending approval; approverStep1 should have received email
+    checkPendingApproval(approverStep1, report, 1, true);
+
+    // Approve the report
+    approveReport(report, approverStep1, false);
+
+    // Check reports pending approval; email will be checked for approverStep3
+    checkPendingApproval(approverStep2, report, 0, false);
+
+    // Try to approve the report
+    approveReport(report, approverStep2, true);
+
+    // Check reports pending approval; approverStep3 should have received email
+    checkPendingApproval(approverStep3, report, 1, true);
+
+    // Approve the report
+    approveReport(report, approverStep3, false);
+    // Mail queue should be empty
+    assertEmails(0);
   }
 
   // Helper methods below
@@ -281,18 +431,24 @@ public class TaskApprovalTest extends AbstractResourceTest {
 
   private Task updateTaskApprovalSteps(Task task, Person approver, boolean isPlanned,
       boolean restrictedApproval) {
-    final ApprovalStep as = new ApprovalStep();
-    as.setName("Task approval by " + approver.getName());
-    as.setType(isPlanned ? ApprovalStepType.PLANNING_APPROVAL : ApprovalStepType.REPORT_APPROVAL);
-    as.setRestrictedApproval(restrictedApproval);
-    final Person unrelatedApprover = getPersonFromDb("ANDERSON, Andrew");
-    as.setApprovers(Lists.newArrayList(approver.getPosition(), unrelatedApprover.getPosition()));
+    final ApprovalStep as = getApprovalStep(approver, isPlanned, restrictedApproval);
     if (isPlanned) {
       task.setPlanningApprovalSteps(Lists.newArrayList(as));
     } else {
       task.setApprovalSteps(Lists.newArrayList(as));
     }
     return updateTask(task);
+  }
+
+  private ApprovalStep getApprovalStep(Person approver, boolean isPlanned,
+      boolean restrictedApproval) {
+    final ApprovalStep as = new ApprovalStep();
+    as.setName("Task approval by " + approver.getName());
+    as.setType(isPlanned ? ApprovalStepType.PLANNING_APPROVAL : ApprovalStepType.REPORT_APPROVAL);
+    as.setRestrictedApproval(restrictedApproval);
+    final Person unrelatedApprover = getPersonFromDb("ANDERSON, Andrew");
+    as.setApprovers(Lists.newArrayList(approver.getPosition(), unrelatedApprover.getPosition()));
+    return as;
   }
 
   private Person getApprover(boolean isPlanned) {
@@ -311,38 +467,39 @@ public class TaskApprovalTest extends AbstractResourceTest {
     return updateTask(task);
   }
 
-  private Task updateTask(Task task) {
-    final Integer nrUpdated =
-        graphQLHelper.updateObject(admin, "updateTask", "task", "TaskInput", task);
-    assertThat(nrUpdated).isEqualTo(1);
-    return getTaskFromDb(task.getUuid());
-  }
-
   private void organizationalApproval(Report report, boolean isPlanned) {
     // No organizational workflow for planned engagements
     if (!isPlanned) {
-      approveReport(report, getPersonFromDb("JACOBSON, Jacob"), false);
-      approveReport(report, getPersonFromDb("BECCABON, Rebecca"), false);
+      final Person jacob = getPersonFromDb("JACOBSON, Jacob");
+      // jacob should have received email
+      assertEmails(1, jacob);
+      approveReport(report, jacob, false);
+      final Person rebecca = getPersonFromDb("BECCABON, Rebecca");
+      // rebecca should have received email
+      assertEmails(1, rebecca);
+      approveReport(report, rebecca, false);
     }
   }
 
-  private void approveReport(Report report, Person person, boolean shouldFail) {
+  private void approveReport(Report report, Person person, boolean expectedToFail) {
     try {
       final Report approved =
           graphQLHelper.updateObject(person, "approveReport", "uuid", REPORT_FIELDS, "String",
               report.getUuid(), new TypeReference<GraphQlResponse<Report>>() {});
-      if (shouldFail) {
+      if (expectedToFail) {
         fail("Expected an exception");
       }
       assertThat(approved).isNotNull();
     } catch (BadRequestException | ForbiddenException e) {
-      if (!shouldFail) {
+      if (!expectedToFail) {
         fail("Unexpected exception");
       }
     }
+
+    sendEmailsToServer();
   }
 
-  private void checkPendingApproval(Person approver, Report report, int size) {
+  private void checkPendingApproval(Person approver, Report report, int size, boolean checkEmails) {
     final ReportSearchQuery pendingQuery = new ReportSearchQuery();
     pendingQuery.setPendingApprovalOf(approver.getUuid());
     final AnetBeanList<Report> pendingApproval = graphQLHelper.searchObjects(approver, "reportList",
@@ -350,6 +507,15 @@ public class TaskApprovalTest extends AbstractResourceTest {
         new TypeReference<GraphQlResponse<AnetBeanList<Report>>>() {});
     assertThat(pendingApproval.getList()).filteredOn(rpt -> rpt.getUuid().equals(report.getUuid()))
         .hasSize(size);
+    if (checkEmails) {
+      if (size > 0) {
+        // approver should have received email
+        assertEmails(size, approver);
+      } else {
+        // approver should not have received email
+        assertEmails(0);
+      }
+    }
   }
 
   private Report submitReport(String text, Person author, Task task, boolean isPlanned,
@@ -396,6 +562,8 @@ public class TaskApprovalTest extends AbstractResourceTest {
     assertThat(submitted).isNotNull();
     assertThat(submitted.getUuid()).isEqualTo(created.getUuid());
 
+    sendEmailsToServer();
+
     // Retrieve the submitted report
     final Report returned = getReport(author, submitted);
     assertThat(returned.getUuid()).isEqualTo(submitted.getUuid());
@@ -404,7 +572,7 @@ public class TaskApprovalTest extends AbstractResourceTest {
     return returned;
   }
 
-  private Report getReport(Person author, final Report report) {
+  private Report getReport(Person author, Report report) {
     final Report returned = graphQLHelper.getObjectById(author, "report", REPORT_FIELDS,
         report.getUuid(), new TypeReference<GraphQlResponse<Report>>() {});
     assertThat(returned).isNotNull();
@@ -419,15 +587,55 @@ public class TaskApprovalTest extends AbstractResourceTest {
     graphQLHelper.deleteObject(author, "deleteReport", report.getUuid());
   }
 
-  private void assertWorkflowSize(Report report, String taskUuid, int size) {
+  private void assertWorkflowSize(Report report, String taskUuid, int expectedSize) {
     assertThat(report.getWorkflow()).isNotNull();
     assertThat(report.getWorkflow())
         .filteredOn(
             wfs -> wfs.getStep() != null && taskUuid.equals(wfs.getStep().getRelatedObjectUuid()))
-        .hasSize(size);
+        .hasSize(expectedSize);
   }
 
-  private Person getPersonFromDb(String name) {
+  private void assertEmails(int expectedNrOfEmails, Person... expectedRecipients) {
+    final List<EmailResponse> emails = getEmailsFromServer();
+    // Check the number of email messages
+    assertThat(emails.size()).isEqualTo(expectedNrOfEmails);
+    // Check that each message has one of the intended recipients
+    emails.forEach(e -> assertThat(expectedRecipients)
+        .anyMatch(r -> emailMatchesRecipient(e, r.getEmailAddress())));
+    // Check that each recipient received a message
+    Arrays.asList(expectedRecipients).forEach(
+        r -> assertThat(emails).anyMatch(e -> emailMatchesRecipient(e, r.getEmailAddress())));
+    // Clean up
+    clearEmailsOnServer();
+  }
+
+  private boolean emailMatchesRecipient(EmailResponse email, String expectedRecipientAddress) {
+    return email.to.values.stream().anyMatch(v -> v.address.equals(expectedRecipientAddress));
+  }
+
+  private void sendEmailsToServer() {
+    // Make sure all messages have been (asynchronously) sent
+    emailWorker.run();
+  }
+
+  private List<EmailResponse> getEmailsFromServer() {
+    try {
+      return emailServer.requestAllEmailsFromServer();
+    } catch (Exception e) {
+      fail("Error checking emails", e);
+    }
+    return null;
+  }
+
+  private void clearEmailsOnServer() {
+    try {
+      emailServer.clearEmailServer();
+    } catch (Exception e) {
+      fail("Error clearing emails", e);
+    }
+  }
+
+  private static Person getPersonFromDb(String name) {
     final PersonSearchQuery personQuery = new PersonSearchQuery();
     personQuery.setText(name);
     final AnetBeanList<Person> searchResults = graphQLHelper.searchObjects(admin, "personList",
@@ -440,12 +648,19 @@ public class TaskApprovalTest extends AbstractResourceTest {
     return personResult.get();
   }
 
-  private Task getTaskFromDb(String uuid) {
+  private static Task getTaskFromDb(String uuid) {
     final Task task = graphQLHelper.getObjectById(admin, "task", TASK_FIELDS, uuid,
         new TypeReference<GraphQlResponse<Task>>() {});
     assertThat(task).isNotNull();
     assertThat(task.getUuid()).isEqualTo(uuid);
     return task;
+  }
+
+  private static Task updateTask(Task task) {
+    final Integer nrUpdated =
+        graphQLHelper.updateObject(admin, "updateTask", "task", "TaskInput", task);
+    assertThat(nrUpdated).isEqualTo(1);
+    return getTaskFromDb(task.getUuid());
   }
 
 }
