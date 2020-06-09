@@ -47,6 +47,8 @@ export const GRAPHQL_NOTE_FIELDS = /* GraphQL */ `
       }
       ... on Report {
         intent
+        engagementDate
+        state
       }
       ... on Task {
         shortName
@@ -135,7 +137,10 @@ export const CUSTOM_FIELD_TYPE = {
 
 const CUSTOM_FIELD_TYPE_SCHEMA = {
   [CUSTOM_FIELD_TYPE.TEXT]: yup.string().nullable().default(""),
-  [CUSTOM_FIELD_TYPE.NUMBER]: yup.number().nullable().default(null),
+  [CUSTOM_FIELD_TYPE.NUMBER]: yup.number().nullable().default(null).typeError(
+    // eslint-disable-next-line no-template-curly-in-string
+    "${path} must be a ${type} type, but the final value was ${originalValue}"
+  ),
   [CUSTOM_FIELD_TYPE.DATE]: yupDate.nullable().default(null),
   [CUSTOM_FIELD_TYPE.DATETIME]: yupDate.nullable().default(null),
   [CUSTOM_FIELD_TYPE.ENUM]: yup.string().nullable().default(""),
@@ -525,12 +530,6 @@ export default class Model {
     dateRange,
     relatedObjectType = ASSESSMENTS_RELATED_OBJECT_TYPE.REPORT
   ) {
-    // FIXME: don't retrieve the published reports but also return the note's
-    // relatedObject and filter on its status
-    const publishedReports = this.publishedReports
-    const publishedReportsUuids = publishedReports
-      ? publishedReports.map(r => r.uuid)
-      : undefined
     return this.notes
       .filter(
         n =>
@@ -538,13 +537,11 @@ export default class Model {
           n.noteRelatedObjects.filter(
             ro =>
               ro.relatedObjectType === Models.Report.relatedObjectType &&
-              (publishedReportsUuids !== undefined
-                ? publishedReportsUuids.includes(ro.relatedObjectUuid)
-                : true)
-          ).length &&
-          // FIXME: make sure we actually filter on the report's engagementDate
-          (!dateRange ||
-            (n.createdAt <= dateRange.end && n.createdAt >= dateRange.start))
+              ro.relatedObject.state === Models.Report.STATE.PUBLISHED &&
+              (!dateRange ||
+                (ro.relatedObject.engagementDate <= dateRange.end &&
+                  ro.relatedObject.engagementDate >= dateRange.start))
+          ).length
       )
       .map(note => utils.parseJsonSafe(note.text))
       .filter(

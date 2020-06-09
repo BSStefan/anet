@@ -161,6 +161,13 @@ export default {
       console.error(`unable to parse JSON: ${jsonString}`)
     }
     return null
+  },
+
+  arrayOfNumbers: function(arr) {
+    return (
+      arr &&
+      arr.filter(n => !isNaN(parseFloat(n)) && isFinite(n)).map(n => Number(n))
+    )
   }
 }
 

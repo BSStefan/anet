@@ -20,11 +20,12 @@ import {
 import IqrBoxPlot from "components/graphs/IqrBoxPlot"
 import LikertScale from "components/graphs/LikertScale"
 import { CUSTOM_FIELD_TYPE } from "components/Model"
+import { AssessmentPeriodPropType, PeriodPropType } from "periodUtils"
 import PropTypes from "prop-types"
 import React from "react"
 import { Col, ControlLabel, FormGroup } from "react-bootstrap"
 
-const AGGERGATION_WIDGET_TYPE = {
+export const AGGERGATION_WIDGET_TYPE = {
   LIKERT_SCALE: "likertScale",
   PIE: "pie",
   LIKERT_SCALE_AND_PIE: "likertScaleAndPie",
@@ -34,6 +35,16 @@ const AGGERGATION_WIDGET_TYPE = {
   DEFAULT: "default"
 }
 
+const AGGREGATION_WIDGET_COMPONENTS = {
+  [AGGERGATION_WIDGET_TYPE.LIKERT_SCALE]: LikertScale,
+  [AGGERGATION_WIDGET_TYPE.PIE]: PieWidget,
+  [AGGERGATION_WIDGET_TYPE.LIKERT_SCALE_AND_PIE]: LikertScaleAndPieWidget,
+  [AGGERGATION_WIDGET_TYPE.IQR_BOX_PLOT]: IqrBoxPlot,
+  [AGGERGATION_WIDGET_TYPE.REPORTS_BY_TASK]: ReportsByTaskWidget,
+  [AGGERGATION_WIDGET_TYPE.CALENDAR]: CalendarWidget,
+  [AGGERGATION_WIDGET_TYPE.DEFAULT]: DefaultAggWidget
+}
+
 const DEFAULT_AGGREGATION_WIDGET_PER_FIELD_TYPE = {
   [CUSTOM_FIELD_TYPE.TEXT]: AGGERGATION_WIDGET_TYPE.DEFAULT,
   [CUSTOM_FIELD_TYPE.NUMBER]: AGGERGATION_WIDGET_TYPE.IQR_BOX_PLOT,
@@ -41,23 +52,11 @@ const DEFAULT_AGGREGATION_WIDGET_PER_FIELD_TYPE = {
   [CUSTOM_FIELD_TYPE.DATETIME]: AGGERGATION_WIDGET_TYPE.CALENDAR,
   [CUSTOM_FIELD_TYPE.ENUM]: AGGERGATION_WIDGET_TYPE.PIE,
   [CUSTOM_FIELD_TYPE.ENUMSET]: AGGERGATION_WIDGET_TYPE.PIE,
-  [CUSTOM_FIELD_TYPE.ARRAY_OF_OBJECTS]: AGGERGATION_WIDGET_TYPE.DEFAULT,
   [CUSTOM_FIELD_TYPE.SPECIAL_FIELD]: {
     [SPECIAL_WIDGET_TYPES.LIKERT_SCALE]:
       AGGERGATION_WIDGET_TYPE.LIKERT_SCALE_AND_PIE,
     [SPECIAL_WIDGET_TYPES.RICH_TEXT_EDITOR]: AGGERGATION_WIDGET_TYPE.DEFAULT
   }
-}
-
-const AGGREGATION_WIDGET_COMPONENTS = {
-  [AGGERGATION_WIDGET_TYPE.LIKERT_SCALE]: LikertScale,
-  [AGGERGATION_WIDGET_TYPE.PIE]: PieWidget,
-  [AGGERGATION_WIDGET_TYPE.LIKERT_SCALE_AND_PIE]: LikertScaleAndPieWidget,
-  [AGGERGATION_WIDGET_TYPE.IQR_BOX_PLOT]: IqrBoxPlot,
-  [AGGERGATION_WIDGET_TYPE.REPORTS_BY_TASK]: ReportsByTaskWidget,
-  [AGGERGATION_WIDGET_TYPE.COUNT_PER_VALUE]: PieWidget,
-  [AGGERGATION_WIDGET_TYPE.CALENDAR]: CalendarWidget,
-  [AGGERGATION_WIDGET_TYPE.DEFAULT]: DefaultAggWidget
 }
 
 const AGGREGATION_TYPE = {
@@ -89,12 +88,23 @@ const AGGREGATION_TYPE_FUNCTION = {
   [AGGREGATION_TYPE.LIKERT_SCALE_AND_PIE_AGG]: likertScaleAndPieAggregation
 }
 
-export const getAggregationWidget = fieldConfig =>
-  fieldConfig.aggregation?.widget ||
-  DEFAULT_AGGREGATION_WIDGET_PER_FIELD_TYPE[fieldConfig.type][
-    fieldConfig.widget
-  ] ||
-  DEFAULT_AGGREGATION_WIDGET_PER_FIELD_TYPE[fieldConfig.type]
+export const getAggregationWidget = (
+  fieldConfig,
+  defaultWidgetPerFieldType = DEFAULT_AGGREGATION_WIDGET_PER_FIELD_TYPE,
+  ignoreFieldConfigWidget = false
+) => {
+  const widget = !ignoreFieldConfigWidget && fieldConfig.aggregation?.widget
+  const defaultWidget = defaultWidgetPerFieldType[fieldConfig.type]
+  const defaultWidgetIsObject = typeof defaultWidget === "object"
+  return (
+    widget ||
+    (defaultWidget &&
+      defaultWidgetIsObject &&
+      defaultWidget[fieldConfig.widget]) ||
+    (!defaultWidgetIsObject && defaultWidget) ||
+    null
+  )
+}
 
 const getAggregationFunction = (fieldConfig, aggregationWidget) => {
   const aggregationType =
@@ -110,9 +120,11 @@ const AggregationWidgetContainer = ({
   fieldConfig,
   fieldName,
   vertical,
+  widget,
+  period,
   ...otherWidgetProps
 }) => {
-  const aggregationWidget = getAggregationWidget(fieldConfig)
+  const aggregationWidget = widget || getAggregationWidget(fieldConfig)
   const aggregationFunction = getAggregationFunction(
     fieldConfig,
     aggregationWidget
@@ -137,6 +149,7 @@ const AggregationWidgetContainer = ({
       vertical={vertical}
       fieldConfig={fieldConfig}
       fieldName={fieldName}
+      period={period}
       {...fieldProps}
       {...otherWidgetProps}
       {...otherAggregationDetails}
@@ -168,10 +181,13 @@ AggregationWidgetContainer.propTypes = {
   data: PropTypes.any,
   fieldConfig: PropTypes.object,
   fieldName: PropTypes.string,
-  vertical: PropTypes.bool
+  vertical: PropTypes.bool,
+  widget: PropTypes.string,
+  period: PropTypes.oneOfType([AssessmentPeriodPropType, PeriodPropType])
 }
 AggregationWidgetContainer.defaultProps = {
-  vertical: true
+  vertical: true,
+  widget: ""
 }
 
 export default AggregationWidgetContainer

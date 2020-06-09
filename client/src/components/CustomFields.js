@@ -169,7 +169,7 @@ const enumHumanValue = (choices, fieldVal) => {
   if (Array.isArray(fieldVal)) {
     return fieldVal && fieldVal.map(k => choices[k].label).join(", ")
   } else {
-    return fieldVal && choices[fieldVal].label
+    return fieldVal && choices[fieldVal]?.label
   }
 }
 
@@ -468,7 +468,8 @@ const CustomField = ({
   const [validateFormDebounced] = useDebouncedCallback(validateForm, 400) // with validateField it somehow doesn't work
   const handleChange = useMemo(
     () => (value, shouldValidate: true) => {
-      const val = value?.target?.value || value
+      const val =
+        value?.target?.value !== undefined ? value.target.value : value
       const sv = shouldValidate === undefined ? true : shouldValidate
       setFieldTouched(fieldName, true, false)
       setFieldValue(fieldName, val, sv)

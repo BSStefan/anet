@@ -136,7 +136,6 @@ public class TaskApprovalTest extends AbstractResourceTest {
     assertWorkflowSize(report, task.getUuid(), 0);
     // Go through organization approval
     organizationalApproval(report, false);
-
   }
 
   // submitted report, unrestricted approval step for effort has matching org

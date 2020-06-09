@@ -5,9 +5,14 @@ import FullCalendar from "@fullcalendar/react"
 import BarChart from "components/BarChart"
 import LikertScale from "components/graphs/LikertScale"
 import Pie from "components/graphs/Pie"
+import _isEmpty from "lodash/isEmpty"
 import _uniqueId from "lodash/uniqueId"
+import { AssessmentPeriodPropType, PeriodPropType } from "periodUtils"
 import PropTypes from "prop-types"
-import React, { useRef } from "react"
+import React, { useRef, useState } from "react"
+import { Button, Collapse, Table } from "react-bootstrap"
+
+const DATE_FORMAT = "YYYY-MM-DD"
 
 const aggregationWidgetPropTypes = {
   values: PropTypes.oneOfType([
@@ -23,11 +28,13 @@ const aggregationWidgetPropTypes = {
   ]),
   fieldConfig: PropTypes.object,
   fieldName: PropTypes.string,
-  vertical: PropTypes.bool
+  vertical: PropTypes.bool,
+  period: PropTypes.oneOfType([AssessmentPeriodPropType, PeriodPropType])
 }
 
 export const PieWidget = ({
   values,
+  entitiesCount,
   legend,
   showLegend = true,
   ...otherWidgetProps
@@ -38,7 +45,7 @@ export const PieWidget = ({
         width={70}
         height={70}
         data={values}
-        label={Object.values(values).reduce((acc, cur) => acc + cur, 0)}
+        label={entitiesCount}
         segmentFill={entity => legend[entity.data.key]?.color}
         segmentLabel={d => d.data.value}
       />
@@ -58,6 +65,7 @@ export const PieWidget = ({
   )
 }
 PieWidget.propTypes = {
+  entitiesCount: PropTypes.number,
   legend: PropTypes.object,
   showLegend: PropTypes.bool,
   ...aggregationWidgetPropTypes
@@ -115,6 +123,7 @@ export const CalendarWidget = ({
   values,
   fieldConfig,
   fieldName,
+  period,
   ...otherWidgetProps
 }) => {
   const calendarComponentRef = useRef(null)
@@ -135,6 +144,7 @@ export const CalendarWidget = ({
         right: ""
       }}
       defaultView="dayGridMonth"
+      defaultDate={period.start.format(DATE_FORMAT)}
       allDayDefault
       eventTimeFormat={{
         hour: "2-digit",
@@ -161,7 +171,39 @@ export const CalendarWidget = ({
 }
 CalendarWidget.propTypes = aggregationWidgetPropTypes
 
-export const DefaultAggWidget = ({ values, ...otherWidgetProps }) => (
-  <div>{`[${values}]`}</div>
-)
+export const DefaultAggWidget = ({ values, ...otherWidgetProps }) => {
+  const [showValues, setShowValues] = useState(false)
+  if (_isEmpty(values)) {
+    return null
+  }
+  return (
+    <div>
+      <Button
+        className="toggle-section-button"
+        style={{ marginBottom: "1rem" }}
+        onClick={toggleShowValues}
+        id="toggleShowValues"
+      >
+        {showValues ? "Hide" : "Show"} {values.length} values
+      </Button>
+      <Collapse in={showValues}>
+        <Table>
+          <tbody>
+            {values.map(val => {
+              const keyValue = _uniqueId("value_")
+              return (
+                <tr key={keyValue}>
+                  <td>val</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </Table>
+      </Collapse>
+    </div>
+  )
+  function toggleShowValues() {
+    setShowValues(!showValues)
+  }
+}
 DefaultAggWidget.propTypes = aggregationWidgetPropTypes
