@@ -112,6 +112,15 @@ const GQL_GET_APP_DATA = gql`
         shortName
       }
     }
+
+    locationList(query: { pageSize: 0 }) {
+      list {
+        uuid
+        name
+        lat
+        lng
+      }
+    }
   }
 `
 
@@ -148,6 +157,7 @@ const App = ({ pageDispatchers, pageProps }) => {
       value={{
         appSettings: appState.settings,
         currentUser: appState.currentUser,
+        allLocations: appState.allLocations,
         loadAppData: refetch
       }}
     >
@@ -191,11 +201,14 @@ const App = ({ pageDispatchers, pageProps }) => {
       setting => (settings[setting.key] = setting.value)
     )
 
+    const allLocations = data?.locationList?.list || []
+
     return {
       currentUser,
       settings,
       advisorOrganizations,
-      principalOrganizations
+      principalOrganizations,
+      allLocations
     }
   }
 }
