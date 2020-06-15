@@ -9,6 +9,7 @@ import Messages from "components/Messages"
 import NavigationWarning from "components/NavigationWarning"
 import { jumpToTop } from "components/Page"
 import { FastField, Form, Formik } from "formik"
+import { parseCoordinate } from "geoUtils"
 import _escape from "lodash/escape"
 import { Location, Person, Position } from "models"
 import PropTypes from "prop-types"
@@ -96,8 +97,8 @@ const BaseLocationForm = ({ currentUser, edit, title, initialValues }) => {
             const latLng = map.wrapLatLng(event.target.getLatLng())
             setValues({
               ...values,
-              lat: Location.parseCoordinate(latLng.lat),
-              lng: Location.parseCoordinate(latLng.lng)
+              lat: parseCoordinate(latLng.lat),
+              lng: parseCoordinate(latLng.lng)
             })
           }
         }
@@ -157,8 +158,8 @@ const BaseLocationForm = ({ currentUser, edit, title, initialValues }) => {
                   const latLng = map.wrapLatLng(event.latlng)
                   setValues({
                     ...values,
-                    lat: Location.parseCoordinate(latLng.lat),
-                    lng: Location.parseCoordinate(latLng.lng)
+                    lat: parseCoordinate(latLng.lat),
+                    lng: parseCoordinate(latLng.lng)
                   })
                 }}
               />
@@ -239,7 +240,11 @@ const BaseLocationForm = ({ currentUser, edit, title, initialValues }) => {
   }
 
   function save(values) {
-    const location = Object.without(new Location(values), "notes")
+    const location = Object.without(
+      new Location(values),
+      "notes",
+      "displayedCoordinate"
+    )
     return API.mutation(edit ? GQL_UPDATE_LOCATION : GQL_CREATE_LOCATION, {
       location
     })
