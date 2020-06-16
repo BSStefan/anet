@@ -1,11 +1,14 @@
-import API, { Settings } from "api"
+import API from "api"
 import { gql } from "apollo-boost"
 import AggregationWidgetContainer, {
+  AGGREGATION_TYPE,
+  AGGERGATION_WIDGET_TYPE,
   getAggregationWidget
 } from "components/aggregations/AggregationWidgetContainer"
 import { CUSTOM_FIELD_TYPE } from "components/Model"
 import { PageDispatchersPropType, useBoilerplate } from "components/Page"
 import _get from "lodash/get"
+import _uniqueId from "lodash/uniqueId"
 import { Report } from "models"
 import {
   PeriodsConfigPropType,
@@ -16,62 +19,55 @@ import pluralize from "pluralize"
 import PropTypes from "prop-types"
 import React, { useEffect } from "react"
 import { Table } from "react-bootstrap"
+import Settings from "settings"
 import utils from "utils"
+
+const choicesFactory = (values, labels, colors) => {
+  const choices = {}
+  Object.forEach(values, val => {
+    choices[val] = { label: labels[val] }
+    if (colors) {
+      choices[val].color = colors[val]
+    }
+  })
+  return choices
+}
 
 const REPORT_FIELDS_FOR_STATISTICS = {
   engagementDate: {
     type: CUSTOM_FIELD_TYPE.DATE
   },
+  location: {
+    aggregation: {
+      widget: AGGERGATION_WIDGET_TYPE.REPORTS_MAP
+    }
+  },
   state: {
     type: CUSTOM_FIELD_TYPE.ENUM,
-    choices: {
-      [Report.STATE.DRAFT]: {
-        label: Report.STATE_LABELS[Report.STATE.DRAFT],
-        color: "#bdbdaf"
-      },
-      [Report.STATE.PENDING_APPROVAL]: {
-        label: Report.STATE_LABELS[Report.STATE.PENDING_APPROVAL],
-        color: "#848478"
-      },
-      [Report.STATE.APPROVED]: {
-        label: Report.STATE_LABELS[Report.STATE.APPROVED],
-        color: "#75eb75"
-      },
-      [Report.STATE.PUBLISHED]: {
-        label: Report.STATE_LABELS[Report.STATE.PUBLISHED],
-        color: "#5cb85c"
-      },
-      [Report.STATE.CANCELLED]: {
-        label: Report.STATE_LABELS[Report.STATE.CANCELLED],
-        color: "#ec971f"
-      },
-      [Report.STATE.REJECTED]: {
-        label: Report.STATE_LABELS[Report.STATE.REJECTED],
-        color: "#c23030"
-      }
-    }
+    choices: choicesFactory(
+      Report.STATE,
+      Report.STATE_LABELS,
+      Report.STATE_COLORS
+    )
+  },
+  engagementStatus: {
+    type: CUSTOM_FIELD_TYPE.ENUMSET,
+    choices: choicesFactory(
+      Report.ENGAGEMENT_STATUS,
+      Report.ENGAGEMENT_STATUS_LABELS
+    )
   },
   tasks: {
     aggregation: {
-      aggregationType: "countReportsByTask",
-      widget: "reportsByTask"
+      aggregationType: AGGREGATION_TYPE.REPORTS_BY_TASK,
+      widget: AGGERGATION_WIDGET_TYPE.REPORTS_BY_TASK
     },
     label: pluralize(Settings.fields.task.subLevel.shortLabel)
   },
   atmosphere: {
-    aggregation: { aggregationType: "countPerValue", widget: "pie" },
+    type: CUSTOM_FIELD_TYPE.ENUM,
     label: Settings.fields.report.atmosphere,
-    choices: {
-      [Report.ATMOSPHERE.POSITIVE]: {
-        label: Report.ATMOSPHERE_LABELS[Report.ATMOSPHERE.POSITIVE]
-      },
-      [Report.ATMOSPHERE.NEGATIVE]: {
-        label: Report.ATMOSPHERE_LABELS[Report.ATMOSPHERE.NEGATIVE]
-      },
-      [Report.ATMOSPHERE.NEUTRAL]: {
-        label: Report.ATMOSPHERE_LABELS[Report.ATMOSPHERE.NEUTRAL]
-      }
-    }
+    choices: choicesFactory(Report.ATMOSPHERE, Report.ATMOSPHERE_LABELS)
   }
 }
 
@@ -85,8 +81,15 @@ const GQL_GET_REPORT_LIST = gql`
         uuid
         intent
         engagementDate
+        location {
+          uuid
+          name
+          lat
+          lng
+        }
         atmosphere
         state
+        engagementStatus
         tasks {
           uuid
           shortName
@@ -118,6 +121,7 @@ const FieldStatisticsRow = ({
             data={periodsData[index]}
             widget={aggregationWidget}
             period={period}
+            widgetId={`${fieldName}-${_uniqueId("statistics")}`}
           />
         </td>
       ))}

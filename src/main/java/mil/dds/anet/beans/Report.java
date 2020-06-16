@@ -34,6 +34,10 @@ public class Report extends AbstractCustomizableAnetBean implements RelatableObj
     APPROVED
   }
 
+  public enum EngagementStatus {
+    HAPPENED, FUTURE, CANCELLED
+  }
+
   public enum Atmosphere {
     POSITIVE, NEUTRAL, NEGATIVE
   }
@@ -111,6 +115,8 @@ public class Report extends AbstractCustomizableAnetBean implements RelatableObj
   private List<AuthorizationGroup> authorizationGroups;
   // annotated below
   private List<ReportAction> workflow;
+  // annotated below
+  private List<EngagementStatus> engagementStatus;
 
   @GraphQLQuery(name = "approvalStep")
   public CompletableFuture<ApprovalStep> loadApprovalStep(
@@ -811,6 +817,15 @@ public class Report extends AbstractCustomizableAnetBean implements RelatableObj
   @JsonIgnore
   public boolean isFutureEngagement() {
     return engagementDate != null && engagementDate.isAfter(Utils.endOfToday());
+  }
+
+  @GraphQLQuery(name = "engagementStatus")
+  public synchronized List<EngagementStatus> loadEngagementStatus() {
+    if (this.engagementStatus == null) {
+      this.engagementStatus =
+          AnetObjectEngine.getInstance().getReportDao().getEngagementStatus(uuid);
+    }
+    return engagementStatus;
   }
 
   @Override

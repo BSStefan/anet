@@ -1,7 +1,7 @@
-import { Settings } from "api"
 import _clone from "lodash/clone"
 import _isEmpty from "lodash/isEmpty"
 import moment from "moment"
+import Settings from "settings"
 
 export const countPerDateAggregation = (fieldName, fieldConfig, data) => {
   const values = data.reduce((counter, entity) => {
@@ -112,6 +112,10 @@ export const reportsByTaskAggregation = (fieldName, fieldConfig, data) => ({
 
 export const valuesListAggregation = (fieldName, fieldConfig, data) => ({
   values: data.map(item => Object.get(item, fieldName))
+})
+
+export const objectsListAggregation = (fieldName, fieldConfig, data) => ({
+  values: data
 })
 
 export const countPerLevelAggregation = (fieldName, fieldConfig, data) => {

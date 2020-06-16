@@ -1,5 +1,4 @@
-import { Settings } from "api"
-import { Control, CRS, Icon, Map, Marker, TileLayer } from "leaflet"
+import { Control, CRS, DomUtil, Icon, Map, Marker, TileLayer } from "leaflet"
 import "leaflet-defaulticon-compatibility"
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.webpack.css"
 import {
@@ -20,6 +19,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react"
 import MARKER_ICON_2X from "resources/leaflet/marker-icon-2x.png"
 import MARKER_ICON from "resources/leaflet/marker-icon.png"
 import MARKER_SHADOW from "resources/leaflet/marker-shadow.png"
+import Settings from "settings"
 
 const css = {
   zIndex: 1
@@ -154,6 +154,18 @@ const Leaflet = ({
         crs: CRS[Settings.imagery.mapOptions.crs]
       }
     )
+    var container = DomUtil.get(mapId)
+    /*
+     * Prevent error "map container is already initialized" when mapId changed
+     * for the current map (which was already initialized).
+     * Note: this happens when the id of a map is not always the same but changes
+     * because of the use of _uniqueId (which we use for map aggregation widgets
+     * to make sure we don't have more maps with the same id on a page - like
+     * on the person show page for statistics of reports authored and attended)
+     */
+    if (container !== null) {
+      container._leaflet_id = null
+    }
     const newMap = new Map(mapId, mapOptions).setView(
       Settings.imagery.mapOptions.homeView.location,
       Settings.imagery.mapOptions.homeView.zoomLevel
