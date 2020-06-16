@@ -64,7 +64,7 @@ public abstract class AbstractSearcher<B extends AbstractAnetBean, T extends Abs
 
     final String materializedView = String.format("\"mv_fts_%1$s\"", tableName);
     final String fullTextColumn = String.format("%1$s.full_text", materializedView);
-    final String tsQuery = "websearch_to_tsquery('anet', :fullTextQuery)";
+    final String tsQuery = getTsQuery();
     whereClauses.add(String.format("SELECT uuid FROM %1$s WHERE %2$s @@ %3$s", materializedView,
         fullTextColumn, tsQuery));
     qb.addWhereClause(String.format("\"%1$s\".uuid IN (%2$s)", tableName,
@@ -78,6 +78,13 @@ public abstract class AbstractSearcher<B extends AbstractAnetBean, T extends Abs
       qb.addSelectClause(
           String.format("(%1$s) AS search_rank", Joiner.on(" + ").join(selectClauses)));
     }
+  }
+
+  private String getTsQuery() {
+    final String tsQueryTpl = "to_tsquery('%1$s', :fullTextQuery)";
+    final String tsQueryAnet = String.format(tsQueryTpl, "anet");
+    final String tsQuerySimple = String.format(tsQueryTpl, "simple");
+    return String.format("(%1$s || %2$s)", tsQueryAnet, tsQuerySimple);
   }
 
   protected List<String> getOrderBy(SortOrder sortOrder, String table, String... columns) {

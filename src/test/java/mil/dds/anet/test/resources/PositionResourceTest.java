@@ -395,8 +395,7 @@ public class PositionResourceTest extends AbstractResourceTest {
 
     // Search by organization
     final OrganizationSearchQuery queryOrgs = new OrganizationSearchQuery();
-    // FIXME: decide what the search should do in both cases
-    queryOrgs.setText(DaoUtils.isPostgresql() ? "\"ef 1\" or \"ef 1.1\"" : "ef 1");
+    queryOrgs.setText("ef 1");
     queryOrgs.setType(OrganizationType.ADVISOR_ORG);
     final AnetBeanList<Organization> orgs = graphQLHelper.searchObjects(jack, "organizationList",
         "query", "OrganizationSearchQueryInput", ORGANIZATION_FIELDS, queryOrgs,

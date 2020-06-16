@@ -25,11 +25,12 @@ public class PostgresqlSearchQueryBuilder<B extends AbstractAnetBean, T extends 
 
   @Override
   public String getFullTextQuery(String text) {
-    String cleanText = stripWildcards(text);
-    if (text.endsWith("*")) {
-      cleanText = cleanText + ":*";
-    }
-    return cleanText;
+    // Replace all special characters for tsquery with spaces
+    final String cleanText = text.trim().replaceAll("[<>:*|&!()\"']", " ");
+    // Split into words
+    final String[] lexemes = cleanText.trim().split("\\s+");
+    // Turn each word into a prefix match, and AND them
+    return Joiner.on(":* & ").join(lexemes).concat(":*");
   }
 
   @Override
