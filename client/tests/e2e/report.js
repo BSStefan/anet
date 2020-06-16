@@ -456,7 +456,7 @@ test.serial(
       )
 
       await $input.sendKeys("user input")
-      await $input.sendKeys(t.context.Key.TAB) // fire blur event
+      await $searchBarInput.click() // fire blur event
       t.false(
         _includes(await $fieldGroup.getAttribute("class"), warningClass),
         `After typing in ${fieldName} field, warning state goes away`
