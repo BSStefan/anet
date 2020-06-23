@@ -133,6 +133,9 @@ const Leaflet = ({
         if (m.onMove) {
           marker.on("moveend", event => m.onMove(event, map))
         }
+        if (m.popupOpen) {
+          marker.on("popupopen", event => m.popupOpen(event))
+        }
         markerLayer.addLayer(marker)
       })
 
