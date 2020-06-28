@@ -131,4 +131,8 @@ export default class Location extends Model {
   toString() {
     return this.name
   }
+
+  isActive() {
+    return this.status === Location.STATUS.ACTIVE
+  }
 }
