@@ -41,6 +41,7 @@ import { PAGE_URLS } from "pages/util"
 import PropTypes from "prop-types"
 import React from "react"
 import { Redirect, Route, Switch } from "react-router-dom"
+import MergeLocations from "pages/admin/MergeLocations"
 
 const BaseRouting = ({ currentUser }) => (
   <Switch>
@@ -117,6 +118,7 @@ const BaseRouting = ({ currentUser }) => (
         <Switch>
           <Route exact path={`${url}/`} component={AdminIndex} />
           <Route path={`${url}/mergePeople`} component={MergePeople} />
+          <Route path={`${url}/mergeLocations`} component={MergeLocations} />
           <Route
             exact
             path={`${url}/authorizationGroups`}

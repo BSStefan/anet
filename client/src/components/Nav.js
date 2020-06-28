@@ -189,6 +189,9 @@ const BaseNav = ({
           <LinkContainer to="/admin/mergePeople" onClick={resetPages}>
             <NavItem>Merge people</NavItem>
           </LinkContainer>
+          <LinkContainer to="/admin/mergeLocations" onClick={resetPages}>
+            <NavItem>Merge locations</NavItem>
+          </LinkContainer>
           <LinkContainer to="/admin/authorizationGroups" onClick={resetPages}>
             <NavItem>Authorization groups</NavItem>
           </LinkContainer>
